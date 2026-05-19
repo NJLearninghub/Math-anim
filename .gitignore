@@ -2,4 +2,5 @@ __pycache__/
 *.pyc
 .DS_Store
 media/Tex/
-media/videos/*/partial_movie_files/
+media/texts/
+media/videos/
