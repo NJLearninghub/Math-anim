@@ -13,12 +13,20 @@ Layout zones (strict — nothing may cross zone boundaries simultaneously):
   EQ      y ≈ +2.20   (equation or key statement)
   AXES    y ∈ [-2.0, +1.8]   (all animations live here)
   NOTE    y ≈ -3.10   (one-liner principle)
+
+Narration is provided by an offline TTS service (src/utils/tts.py) since
+gTTS is blocked from cloud IPs. Overlap safeguards live in
+src/utils/layout.py and are reused here for the S8 angle labels.
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import numpy as np
 from manim import *
+from manim_voiceover import VoiceoverScene
+
+from src.utils.tts import OfflineTTSService
+from src.utils.layout import warn_zone_violation
 
 # ── palette ────────────────────────────────────────────────────────────────
 BG      = "#0d1117"
@@ -88,10 +96,11 @@ def make_eq_box(tex_str, font_size=38, color=WHITE):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-class ProjectileMotionScene(Scene):
+class ProjectileMotionScene(VoiceoverScene):
 
     def construct(self):
         self.camera.background_color = BG
+        self.set_speech_service(OfflineTTSService())
         self._s1_hook()
         self._s2_feynman_start()
         self._s3_horizontal()
@@ -126,14 +135,21 @@ class ProjectileMotionScene(Scene):
                         font_size=26, color=GRAY_B, slant=ITALIC)
         question.to_edge(DOWN, buff=0.32)
 
-        self.play(Write(title, run_time=1.2))
-        self.add(shadow_trail)
-        self.play(Create(ax, run_time=0.8))
-        self.play(
-            MoveAlongPath(ball, curve, run_time=3.2, rate_func=linear),
-        )
-        self.play(FadeIn(question))
-        self.wait(1.5)
+        with self.voiceover(
+            text="Watch this ball rise, curve, and fall back down in a "
+                 "perfect arc. Why does it follow exactly this shape?"
+        ) as tracker:
+            self.play(Write(title, run_time=1.2))
+            self.add(shadow_trail)
+            self.play(Create(ax, run_time=0.8))
+            self.play(
+                MoveAlongPath(ball, curve,
+                              run_time=max(tracker.duration - 2.0, 1.5),
+                              rate_func=linear),
+            )
+            self.play(FadeIn(question))
+
+        self.wait(1.0)
         self.play(FadeOut(VGroup(title, ax, ball, shadow_trail, question,
                                   curve)))
 
@@ -151,14 +167,21 @@ class ProjectileMotionScene(Scene):
         ).arrange(DOWN, buff=0.38, aligned_edge=LEFT)
         lines.move_to([0, -0.2, 0])
 
-        for line in lines:
-            self.play(FadeIn(line, shift=RIGHT * 0.25, run_time=0.55))
+        with self.voiceover(
+            text="Let's use Feynman's technique: to truly understand "
+                 "something, build it up from scratch in five steps — "
+                 "observe, simplify, find the law, derive the math, "
+                 "then check the extremes."
+        ) as tracker:
+            for line in lines:
+                self.play(FadeIn(line, shift=RIGHT * 0.25,
+                                  run_time=tracker.duration / len(lines)))
 
         note = make_note(
             '"If you cannot explain it simply, you do not understand it." — Feynman'
         )
         self.play(FadeIn(note))
-        self.wait(2.5)
+        self.wait(1.5)
         self.play(FadeOut(VGroup(hdr, lines, note)))
 
     # ══════ S3: Horizontal Motion ════════════════════════════════════════════
@@ -170,7 +193,6 @@ class ProjectileMotionScene(Scene):
         idea = Text("Nothing pushes the ball sideways  →  it keeps the same speed",
                     font_size=24, color=H_COL)
         idea.move_to([0, 2.20, 0])
-        self.play(FadeIn(idea))
 
         # MODEL: axes showing x vs t (straight line)
         ax = Axes(
@@ -187,13 +209,10 @@ class ProjectileMotionScene(Scene):
         y_label = ax.get_y_axis_label(MathTex("x\\,(m)", font_size=24),
                                        edge=UP, direction=UP, buff=0.15)
 
-        self.play(Create(ax), FadeIn(x_label), FadeIn(y_label))
-
         # Animate straight line x = v0_x * t
         v0x = V0 * np.cos(DEG45)
         line_x = ax.plot(lambda t: v0x * t, x_range=[0, 3.8],
                          color=H_COL, stroke_width=2.5)
-        self.play(Create(line_x, run_time=1.8))
 
         # Dot moving at constant speed (right panel animation)
         anim_line = NumberLine(x_range=[0, 12, 3], length=4.5,
@@ -210,22 +229,30 @@ class ProjectileMotionScene(Scene):
                          font_size=18, color=H_COL)
         lbl_equal.next_to(anim_line, DOWN, buff=0.5)
 
-        self.play(Create(anim_line))
-        self.play(anim_dot.animate.move_to(anim_line.n2p(v0x * 3.0)),
-                  run_time=2.0, rate_func=linear)
-        self.play(FadeIn(time_dots), FadeIn(lbl_equal))
-        self.wait(0.5)
-
         # QUANTIFY: equation emerges
-        self.play(FadeOut(idea))
         eq_x = make_eq_box(r"x(t) \;=\; v_0 \cos\theta \cdot t", color=H_COL)
-        self.play(Write(eq_x, run_time=1.2))
+
+        with self.voiceover(
+            text="Nothing pushes the ball sideways. By Newton's first "
+                 "law, that means its horizontal speed never changes — "
+                 "equal time gives equal distance. This gives us "
+                 "x equals v-zero cosine theta, times t."
+        ) as tracker:
+            self.play(FadeIn(idea))
+            self.play(Create(ax), FadeIn(x_label), FadeIn(y_label))
+            self.play(Create(line_x, run_time=1.8))
+            self.play(Create(anim_line))
+            self.play(anim_dot.animate.move_to(anim_line.n2p(v0x * 3.0)),
+                      run_time=2.0, rate_func=linear)
+            self.play(FadeIn(time_dots), FadeIn(lbl_equal))
+            self.play(FadeOut(idea))
+            self.play(Write(eq_x, run_time=1.2))
 
         note = make_note(
             "Newton's 1st Law: no sideways force → sideways velocity is constant"
         )
         self.play(FadeIn(note))
-        self.wait(2.5)
+        self.wait(1.5)
         self.play(FadeOut(VGroup(hdr, ax, x_label, y_label, line_x,
                                   anim_line, anim_dot, time_dots, lbl_equal,
                                   eq_x, note)))
@@ -239,7 +266,6 @@ class ProjectileMotionScene(Scene):
         idea = Text("Gravity adds 9.8 m/s of downward speed  every  second",
                     font_size=24, color=V_COL)
         idea.move_to([0, 2.20, 0])
-        self.play(FadeIn(idea))
 
         # Left: ball positions at equal time steps — gaps grow!
         column_x = -4.5
@@ -265,13 +291,9 @@ class ProjectileMotionScene(Scene):
                 gap_arrows.add(arr)
             prev_y = y_scene
 
-        self.play(FadeIn(gap_dots, lag_ratio=0.3, run_time=1.5))
-        self.play(Create(gap_arrows, lag_ratio=0.4, run_time=1.2))
-
         gaps_lbl = Text("gaps increase\n= accelerating downward",
                         font_size=17, color=G_COL)
         gaps_lbl.move_to([column_x + 1.55, 0.0, 0])
-        self.play(FadeIn(gaps_lbl))
 
         # Right: velocity arrow growing downward
         ax_v = Axes(
@@ -289,27 +311,38 @@ class ProjectileMotionScene(Scene):
         line_vy = ax_v.plot(lambda t: -G_SIM * t, x_range=[0, 2.0],
                             color=V_COL, stroke_width=2.5)
 
-        self.play(Create(ax_v), FadeIn(x_lbl_v), FadeIn(y_lbl_v))
-        self.play(Create(line_vy, run_time=1.5))
-
         slope_lbl = Text("slope = −g", font_size=18, color=G_COL)
         slope_lbl.move_to(ax_v.c2p(0.8, -3.5) + RIGHT * 0.8)
-        self.play(FadeIn(slope_lbl))
-        self.wait(0.4)
 
         # Equation emerges
-        self.play(FadeOut(idea))
         eq_y = make_eq_box(
             r"y(t) \;=\; v_0\sin\theta\cdot t \;-\; \tfrac{1}{2}g t^2",
             color=V_COL,
         )
-        self.play(Write(eq_y, run_time=1.5))
+
+        with self.voiceover(
+            text="Now the vertical motion. Gravity pulls down constantly, "
+                 "adding the same extra speed every second — that's "
+                 "Newton's second law: force equals mass times "
+                 "acceleration, and the only force here is gravity. "
+                 "This gives us y equals v-zero sine theta times t, "
+                 "minus one half g t squared."
+        ) as tracker:
+            self.play(FadeIn(idea))
+            self.play(FadeIn(gap_dots, lag_ratio=0.3, run_time=1.5))
+            self.play(Create(gap_arrows, lag_ratio=0.4, run_time=1.2))
+            self.play(FadeIn(gaps_lbl))
+            self.play(Create(ax_v), FadeIn(x_lbl_v), FadeIn(y_lbl_v))
+            self.play(Create(line_vy, run_time=1.5))
+            self.play(FadeIn(slope_lbl))
+            self.play(FadeOut(idea))
+            self.play(Write(eq_y, run_time=1.5))
 
         note = make_note(
             "Newton's 2nd Law: F = ma, only force is gravity → a = −g downward"
         )
         self.play(FadeIn(note))
-        self.wait(2.5)
+        self.wait(1.5)
         self.play(FadeOut(VGroup(hdr, idea, gap_dots, gap_arrows, gaps_lbl,
                                   ax_v, x_lbl_v, y_lbl_v, line_vy, slope_lbl,
                                   eq_y, note)))
@@ -325,13 +358,11 @@ class ProjectileMotionScene(Scene):
             font_size=25, color=ORANGE,
         )
         insight.move_to([0, 2.20, 0])
-        self.play(FadeIn(insight))
 
         # Show two balls: one thrown horizontally, one dropped
         # Both reach the ground at the same time
         ground = Line([-5.5, -1.8, 0], [5.5, -1.8, 0],
                       color=GRAY_C, stroke_width=2)
-        self.play(Create(ground))
 
         # Ball A: thrown horizontally (constant horizontal + falling)
         ball_A = Dot([-4.5, 1.5, 0], color=H_COL, radius=0.15)
@@ -343,70 +374,64 @@ class ProjectileMotionScene(Scene):
         lbl_B = Text("Dropped\nstraight down", font_size=18, color=G_COL)
         lbl_B.next_to(ball_B, UP, buff=0.12)
 
-        self.play(FadeIn(ball_A), FadeIn(lbl_A),
-                  FadeIn(ball_B), FadeIn(lbl_B))
-        self.wait(0.5)
-
-        # Animate both falling — same vertical motion
-        N = 60
-        dt_sim = 0.06
-        paths_A, paths_B = [], []
-        xA, yA = -4.5, 1.5
-        xB, yB =  2.5, 1.5
-        vx_A = 1.2     # horizontal velocity of A
-        for _ in range(N):
-            yA -= 0.5 * G_SIM * dt_sim**2 + (0.5 * G_SIM * dt_sim) * 0.5
-            xA += vx_A * dt_sim
-            yB -= 0.5 * G_SIM * dt_sim**2 + (0.5 * G_SIM * dt_sim) * 0.5
-            paths_A.append([xA, max(yA, -1.8), 0])
-            paths_B.append([xB, max(yB, -1.8), 0])
-
-        # Simpler: just animate to ground simultaneously using always_redraw
+        # Animate both falling — same vertical motion, via always_redraw
         target_y = -1.8
         start_y  =  1.5
         total_t  = np.sqrt(2 * (start_y - target_y) / G_SIM)  # free-fall time
+        vx_A = 1.2     # horizontal velocity of A
 
-        tracker = ValueTracker(0)
+        fall_tracker = ValueTracker(0)
 
         def ball_A_pos():
-            t = tracker.get_value()
+            t = fall_tracker.get_value()
             y = start_y - 0.5 * G_SIM * t**2
             x = -4.5 + vx_A * t
             return [min(x, 4.5), max(y, target_y), 0]
 
         def ball_B_pos():
-            t = tracker.get_value()
+            t = fall_tracker.get_value()
             y = start_y - 0.5 * G_SIM * t**2
             return [2.5, max(y, target_y), 0]
 
-        ball_A.add_updater(lambda d: d.move_to(ball_A_pos()))
-        ball_B.add_updater(lambda d: d.move_to(ball_B_pos()))
+        with self.voiceover(
+            text="Here's the key insight. Horizontal motion and vertical "
+                 "motion are completely independent. A ball thrown "
+                 "sideways and a ball dropped straight down hit the "
+                 "ground at exactly the same moment — Galileo proved "
+                 "it by experiment."
+        ) as tracker:
+            self.play(FadeIn(insight))
+            self.play(Create(ground))
+            self.play(FadeIn(ball_A), FadeIn(lbl_A),
+                      FadeIn(ball_B), FadeIn(lbl_B))
 
-        # Horizontal velocity arrow for A
-        h_arr = always_redraw(lambda: Arrow(
-            ball_A.get_center(),
-            ball_A.get_center() + RIGHT * 0.9,
-            buff=0, color=H_COL, stroke_width=2.5,
-            max_tip_length_to_length_ratio=0.35,
-        ))
-        self.add(h_arr)
+            ball_A.add_updater(lambda d: d.move_to(ball_A_pos()))
+            ball_B.add_updater(lambda d: d.move_to(ball_B_pos()))
 
-        self.play(tracker.animate.set_value(total_t),
-                  run_time=2.8, rate_func=linear)
+            # Horizontal velocity arrow for A
+            h_arr = always_redraw(lambda: Arrow(
+                ball_A.get_center(),
+                ball_A.get_center() + RIGHT * 0.9,
+                buff=0, color=H_COL, stroke_width=2.5,
+                max_tip_length_to_length_ratio=0.35,
+            ))
+            self.add(h_arr)
 
-        ball_A.clear_updaters()
-        ball_B.clear_updaters()
-        self.remove(h_arr)
+            self.play(fall_tracker.animate.set_value(total_t),
+                      run_time=2.8, rate_func=linear)
 
-        # Flash when they land together
-        self.play(Flash(ball_A.get_center(), color=H_COL, line_length=0.35),
-                  Flash(ball_B.get_center(), color=G_COL, line_length=0.35))
+            ball_A.clear_updaters()
+            ball_B.clear_updaters()
+            self.remove(h_arr)
 
-        simultaneous = Text("They land at the SAME time!",
-                            font_size=26, color=YELLOW_C, weight=BOLD)
-        simultaneous.move_to([0, 0.6, 0])
-        self.play(FadeIn(simultaneous))
-        self.wait(1.0)
+            # Flash when they land together
+            self.play(Flash(ball_A.get_center(), color=H_COL, line_length=0.35),
+                      Flash(ball_B.get_center(), color=G_COL, line_length=0.35))
+
+            simultaneous = Text("They land at the SAME time!",
+                                font_size=26, color=YELLOW_C, weight=BOLD)
+            simultaneous.move_to([0, 0.6, 0])
+            self.play(FadeIn(simultaneous))
 
         self.play(FadeOut(lbl_A), FadeOut(lbl_B))
 
@@ -421,7 +446,7 @@ class ProjectileMotionScene(Scene):
             "Galileo proved this by experiment — horizontal motion never affects free fall"
         )
         self.play(FadeIn(note))
-        self.wait(2.5)
+        self.wait(1.5)
         self.play(FadeOut(VGroup(hdr, ground, ball_A, ball_B,
                                   simultaneous, math_indep, note)))
 
@@ -439,7 +464,6 @@ class ProjectileMotionScene(Scene):
             MathTex(r"y\;(\mathrm{m})", font_size=22),
             edge=UP, direction=UP, buff=0.12,
         )
-        self.play(Create(ax), FadeIn(x_lbl), FadeIn(y_lbl))
 
         # Animate dots appearing at equal time steps
         Tf  = T_flight()
@@ -451,24 +475,18 @@ class ProjectileMotionScene(Scene):
             dot = Dot(ax.c2p(xp, yp), radius=0.09, color=T_COL).set_opacity(0.7)
             step_dots.add(dot)
 
-        self.play(FadeIn(step_dots, lag_ratio=0.12, run_time=1.8))
-
         # Draw the full curve through them
         curve = ax.plot_parametric_curve(
             lambda t: [traj_xy(t)[0], traj_xy(t)[1]],
             t_range=[0, Tf],
             color=T_COL, stroke_width=3,
         )
-        self.play(Create(curve, run_time=2.0))
 
         # Ball tracing it
         ball = Dot(color=BALL_C, radius=0.14).move_to(ax.c2p(0, 0))
         shadow = TracedPath(ball.get_center,
                             stroke_color=T_COL, stroke_width=1.5,
                             stroke_opacity=0.4)
-        self.add(shadow, ball)
-        self.play(MoveAlongPath(ball, curve, run_time=2.2, rate_func=linear))
-        self.remove(shadow)
 
         # Key labels: peak, range — placed so they never overlap curve or axes
         xH, yH = traj_xy(Tf / 2)
@@ -481,21 +499,32 @@ class ProjectileMotionScene(Scene):
         range_lbl = Text("R = range", font_size=18, color=H_COL)
         range_lbl.next_to(range_dot, UR, buff=0.15)
 
-        self.play(FadeIn(peak_dot), FadeIn(peak_lbl))
-        self.play(FadeIn(range_dot), FadeIn(range_lbl))
-
         # Derive the parabola equation (eliminate t)
         eq_para = make_eq_box(
             r"y = x\tan\theta \;-\; \frac{g\,x^2}{2v_0^2\cos^2\!\theta}",
             font_size=34, color=T_COL,
         )
-        self.play(Write(eq_para, run_time=1.5))
+
+        with self.voiceover(
+            text="Now put both motions together, and a parabola appears. "
+                 "If we eliminate time from the two equations, y becomes "
+                 "a quadratic function of x — that's the trajectory."
+        ) as tracker:
+            self.play(Create(ax), FadeIn(x_lbl), FadeIn(y_lbl))
+            self.play(FadeIn(step_dots, lag_ratio=0.12, run_time=1.8))
+            self.play(Create(curve, run_time=2.0))
+            self.add(shadow, ball)
+            self.play(MoveAlongPath(ball, curve, run_time=2.2, rate_func=linear))
+            self.remove(shadow)
+            self.play(FadeIn(peak_dot), FadeIn(peak_lbl))
+            self.play(FadeIn(range_dot), FadeIn(range_lbl))
+            self.play(Write(eq_para, run_time=1.5))
 
         note = make_note(
             "Eliminate t from x(t) and y(t) → a quadratic in x → parabola"
         )
         self.play(FadeIn(note))
-        self.wait(2.5)
+        self.wait(1.5)
         self.play(FadeOut(VGroup(hdr, ax, x_lbl, y_lbl, curve, step_dots,
                                   ball, peak_dot, peak_lbl, range_dot,
                                   range_lbl, eq_para, note)))
@@ -534,15 +563,20 @@ class ProjectileMotionScene(Scene):
         cards.arrange(DOWN, buff=0.30)
         cards.move_to([0, -0.10, 0])
 
-        for card in cards:
-            self.play(FadeIn(card, shift=LEFT * 0.2, run_time=0.65))
-            self.wait(0.5)
+        with self.voiceover(
+            text="From these two simple equations, we can now calculate "
+                 "everything: the time of flight, the horizontal range, "
+                 "and the maximum height the ball reaches."
+        ) as tracker:
+            for card in cards:
+                self.play(FadeIn(card, shift=LEFT * 0.2,
+                                  run_time=tracker.duration / len(cards)))
 
         note = make_note(
             "All three follow directly from x(t) = v₀cosθ·t and y(t) = v₀sinθ·t − ½gt²"
         )
         self.play(FadeIn(note))
-        self.wait(3.0)
+        self.wait(1.5)
         self.play(FadeOut(VGroup(hdr, cards, note)))
 
     # ══════ S8: Angle Effect ══════════════════════════════════════════════════
@@ -551,7 +585,9 @@ class ProjectileMotionScene(Scene):
                           color=YELLOW_C)
         self.play(Write(hdr))
 
-        ax = make_traj_axes(x_max=14, y_max=5.0)
+        # y_max raised from 4.0 → 6.5 so the 75° trajectory peak (which would
+        # otherwise reach into the EQ zone) stays inside the AXES zone.
+        ax = make_traj_axes(x_max=14, y_max=6.5)
         x_lbl = ax.get_x_axis_label(
             MathTex(r"x", font_size=22),
             edge=RIGHT, direction=RIGHT, buff=0.12,
@@ -561,6 +597,7 @@ class ProjectileMotionScene(Scene):
         angles_deg = [15, 30, 45, 60, 75]
         colors      = [PURPLE_C, BLUE_C, YELLOW_C, GREEN, RED_C]
 
+        curves = VGroup()
         legend_items = VGroup()
         for deg, col in zip(angles_deg, colors):
             theta = np.radians(deg)
@@ -570,18 +607,12 @@ class ProjectileMotionScene(Scene):
                 t_range=[0, Tf],
                 color=col, stroke_width=2.5,
             )
-            self.play(Create(curve, run_time=0.6))
-
-            # Range label at landing point — stagger vertically to avoid overlap
-            R = traj_range(theta)
-            leg = Text(f"{deg}°", font_size=17, color=col)
-            legend_items.add(leg)
+            curves.add(curve)
+            legend_items.add(Text(f"{deg}°", font_size=17, color=col))
 
         # Legend in top-right corner of axes area (clear of other text)
         legend_items.arrange(DOWN, buff=0.20)
         legend_items.move_to([4.8, 0.8, 0])
-        self.play(FadeIn(legend_items))
-        self.wait(0.5)
 
         # Highlight 45°
         theta45 = np.radians(45)
@@ -591,28 +622,42 @@ class ProjectileMotionScene(Scene):
             t_range=[0, Tf45],
             color=YELLOW_C, stroke_width=5.5,
         )
-        self.play(Create(highlight, run_time=0.8))
 
         best_lbl = Text("45° → maximum range", font_size=22,
                         color=YELLOW_C, weight=BOLD)
         best_lbl.move_to([0, 2.20, 0])
-        self.play(FadeIn(best_lbl))
+        warn_zone_violation(best_lbl, "best_lbl", "EQ")
 
-        # Show the derivative argument briefly
+        # Derivative argument — placed below the EQ zone (not next_to best_lbl)
+        # so it never gets crossed by the descending 60°/75° trajectory arcs.
         deriv = MathTex(
             r"\frac{dR}{d\theta}=0 \;\Rightarrow\; \cos 2\theta = 0"
             r"\;\Rightarrow\; \theta = 45°",
             font_size=26, color=GRAY_B,
         )
-        deriv.next_to(best_lbl, DOWN, buff=0.22)
-        self.play(Write(deriv, run_time=1.2))
+        deriv.move_to([0, 1.20, 0])
+
+        with self.voiceover(
+            text="Which launch angle gives the longest range? Taking the "
+                 "derivative of the range with respect to theta and "
+                 "setting it to zero gives cosine of two theta equals "
+                 "zero — so theta equals 45 degrees. Notice that 30 and "
+                 "60 degrees give the same range — complementary angles "
+                 "always do."
+        ) as tracker:
+            for curve in curves:
+                self.play(Create(curve, run_time=0.6))
+            self.play(FadeIn(legend_items))
+            self.play(Create(highlight, run_time=0.8))
+            self.play(FadeIn(best_lbl))
+            self.play(Write(deriv, run_time=1.2))
 
         note = make_note(
             "Symmetry: 30° and 60° give the same range — complementary angles always do"
         )
         self.play(FadeIn(note))
-        self.wait(2.5)
-        self.play(FadeOut(VGroup(hdr, ax, x_lbl, legend_items,
+        self.wait(1.5)
+        self.play(FadeOut(VGroup(hdr, ax, x_lbl, legend_items, curves,
                                   highlight, best_lbl, deriv, note)))
 
     # ══════ S9: Real World ════════════════════════════════════════════════════
@@ -624,7 +669,6 @@ class ProjectileMotionScene(Scene):
         sub = Text("① Basketball — the arc to the hoop",
                    font_size=24, color=ORANGE)
         sub.move_to([0, 2.20, 0])
-        self.play(FadeIn(sub))
 
         ax1 = Axes(
             x_range=[0, 11, 2], y_range=[0, 4.5, 1],
@@ -658,16 +702,23 @@ class ProjectileMotionScene(Scene):
         )
         ball_bb = Dot(color=ORANGE, radius=0.14).move_to(ax1.c2p(0, 0))
 
-        self.play(Create(ax1), FadeIn(hoop), FadeIn(hoop_board))
-        self.add(ball_bb)
-        self.play(MoveAlongPath(ball_bb, curve_bb, run_time=2.0,
-                                rate_func=linear))
-
         angle_lbl = Text("~52° optimal for this distance", font_size=18,
                          color=ORANGE)
         angle_lbl.to_edge(DOWN, buff=0.28)
-        self.play(FadeIn(angle_lbl))
-        self.wait(1.5)
+
+        with self.voiceover(
+            text="In basketball, players intuitively find the launch "
+                 "angle — often around 52 degrees — that arcs the ball "
+                 "into the hoop."
+        ) as tracker:
+            self.play(FadeIn(sub))
+            self.play(Create(ax1), FadeIn(hoop), FadeIn(hoop_board))
+            self.add(ball_bb)
+            self.play(MoveAlongPath(ball_bb, curve_bb, run_time=2.0,
+                                    rate_func=linear))
+            self.play(FadeIn(angle_lbl))
+
+        self.wait(0.5)
         self.play(FadeOut(VGroup(sub, ax1, hoop, hoop_board, ball_bb,
                                   curve_bb, angle_lbl)))
 
@@ -675,7 +726,6 @@ class ProjectileMotionScene(Scene):
         sub2 = Text("② Water Fountain — jets at different angles",
                     font_size=24, color=BLUE_C)
         sub2.move_to([0, 2.20, 0])
-        self.play(FadeIn(sub2))
 
         nozzle = Dot([0, -1.8, 0], color=GRAY_B, radius=0.15)
         nozzle_base = Rectangle(width=0.5, height=0.3,
@@ -700,14 +750,21 @@ class ProjectileMotionScene(Scene):
             curve_f.set_stroke(col, width=2.0, opacity=0.8)
             fountain_curves.add(curve_f)
 
-        self.play(FadeIn(nozzle), FadeIn(nozzle_base))
-        self.play(Create(fountain_curves, lag_ratio=0.1, run_time=2.0))
-
         fount_lbl = Text("Same v₀, different angles → different arcs",
                          font_size=19, color=BLUE_C)
         fount_lbl.to_edge(DOWN, buff=0.28)
-        self.play(FadeIn(fount_lbl))
-        self.wait(2.0)
+
+        with self.voiceover(
+            text="Water fountains shoot jets at the same speed but "
+                 "different angles, tracing out a whole family of these "
+                 "parabolic arcs."
+        ) as tracker:
+            self.play(FadeIn(sub2))
+            self.play(FadeIn(nozzle), FadeIn(nozzle_base))
+            self.play(Create(fountain_curves, lag_ratio=0.1, run_time=2.0))
+            self.play(FadeIn(fount_lbl))
+
+        self.wait(0.5)
         self.play(FadeOut(VGroup(sub2, nozzle, nozzle_base,
                                   fountain_curves, fount_lbl)))
 
@@ -715,7 +772,6 @@ class ProjectileMotionScene(Scene):
         sub3 = Text("③ Athletics — javelin & long jump",
                     font_size=24, color=GREEN_C)
         sub3.move_to([0, 2.20, 0])
-        self.play(FadeIn(sub3))
 
         ax3 = Axes(
             x_range=[0, 14, 2], y_range=[0, 4, 1],
@@ -723,15 +779,13 @@ class ProjectileMotionScene(Scene):
             axis_config={"color": GRAY_C, "stroke_width": 1.2, "include_tip": False},
             tips=False,
         ).move_to([0, -0.2, 0])
-        self.play(Create(ax3))
 
         jav_data = [
-            (35, 4.5, RED_C,   "35° (air drag reduces to ~35° in reality)"),
-            (45, 4.5, GREEN_C, "45° (no-drag ideal)"),
+            (35, 4.5, RED_C),
+            (45, 4.5, GREEN_C),
         ]
         jav_curves = VGroup()
-        jav_labels = VGroup()
-        for deg, v0j, col, desc in jav_data:
+        for deg, v0j, col in jav_data:
             theta_j = np.radians(deg)
             Tf_j    = T_flight(theta_j, v0j)
             c = ax3.plot_parametric_curve(
@@ -741,29 +795,42 @@ class ProjectileMotionScene(Scene):
                 t_range=[0, Tf_j],
                 color=col, stroke_width=2.5,
             )
-            R_j = traj_range(theta_j, v0j)
-            lbl = Text(desc, font_size=16, color=col)
-            lbl.move_to(ax3.c2p(R_j * 0.55, traj_height(theta_j, v0j) + 0.5))
             jav_curves.add(c)
-            jav_labels.add(lbl)
 
-        self.play(Create(jav_curves, lag_ratio=0.5, run_time=1.5))
-        self.play(FadeIn(jav_labels, lag_ratio=0.5))
+        # Corner-anchored legend (was: labels floating at trajectory-dependent
+        # positions, which drifted into the curves/axes area).
+        jav_legend = VGroup(
+            Text("35° — real-world optimal (air drag)", font_size=15, color=RED_C),
+            Text("45° — no-drag ideal", font_size=15, color=GREEN_C),
+        ).arrange(DOWN, buff=0.18, aligned_edge=LEFT)
+        # Shift below the header (which spans most of the top edge) to
+        # avoid overlapping "Real World Applications".
+        jav_legend.to_corner(UR, buff=0.4).shift(DOWN * 0.9)
 
         jav_note = Text(
             "Air resistance shifts optimal angle below 45° in real throws",
             font_size=19, color=GRAY_B,
         )
         jav_note.to_edge(DOWN, buff=0.28)
-        self.play(FadeIn(jav_note))
-        self.wait(2.0)
-        self.play(FadeOut(VGroup(sub3, ax3, jav_curves, jav_labels, jav_note)))
+
+        with self.voiceover(
+            text="In javelin throwing, air resistance shifts the optimal "
+                 "angle from the ideal 45 degrees down to around 35 "
+                 "degrees in real throws."
+        ) as tracker:
+            self.play(FadeIn(sub3))
+            self.play(Create(ax3))
+            self.play(Create(jav_curves, lag_ratio=0.5, run_time=1.5))
+            self.play(FadeIn(jav_legend))
+            self.play(FadeIn(jav_note))
+
+        self.wait(0.5)
+        self.play(FadeOut(VGroup(sub3, ax3, jav_curves, jav_legend, jav_note)))
 
         # ── 4. Orbital Mechanics (extreme case) ───────────────────────────────
         sub4 = Text("④ The extreme case: Throw fast enough → Orbit!",
                     font_size=24, color=PURPLE_C)
         sub4.move_to([0, 2.20, 0])
-        self.play(FadeIn(sub4))
 
         # Earth circle in center, then an arc becoming nearly circular
         earth = Circle(radius=1.2, color=BLUE_E,
@@ -773,12 +840,9 @@ class ProjectileMotionScene(Scene):
                        stroke_width=1.0, stroke_opacity=0.4, fill_opacity=0)
         atmo.move_to(earth.get_center())
 
-        self.play(Create(earth), Create(atmo))
-
         # Multiple arcs from surface, getting more "orbital"
         orbit_colors = [ORANGE, YELLOW_C, GREEN, PURPLE_C]
         orbit_arcs   = VGroup()
-        start_pos    = earth.get_center() + LEFT * 1.2 + UP * 0.0
         for i, col in enumerate(orbit_colors):
             frac = (i + 1) / len(orbit_colors)
             # Increasingly curved path: partial ellipse
@@ -791,8 +855,6 @@ class ProjectileMotionScene(Scene):
             arc.move_to(earth.get_center())
             orbit_arcs.add(arc)
 
-        self.play(Create(orbit_arcs, lag_ratio=0.4, run_time=2.0))
-
         # Labels for the orbit arcs — staggered on the right side
         orbit_labels = VGroup()
         for i, (col, lbl_txt) in enumerate(zip(
@@ -802,15 +864,27 @@ class ProjectileMotionScene(Scene):
             lbl = Text(lbl_txt, font_size=15, color=col)
             lbl.move_to([4.2, 1.4 - i * 0.55, 0])
             orbit_labels.add(lbl)
-            self.play(FadeIn(lbl), run_time=0.35)
 
         orbit_note = Text(
             "Newton realised: the Moon is just a very fast projectile!",
             font_size=20, color=PURPLE_C,
         )
         orbit_note.to_edge(DOWN, buff=0.28)
-        self.play(FadeIn(orbit_note))
-        self.wait(2.5)
+
+        with self.voiceover(
+            text="And here's the extreme case. Throw the ball fast "
+                 "enough, and it falls around the curve of the Earth "
+                 "forever — that's an orbit. Newton realized the Moon "
+                 "is just a very fast projectile."
+        ) as tracker:
+            self.play(FadeIn(sub4))
+            self.play(Create(earth), Create(atmo))
+            self.play(Create(orbit_arcs, lag_ratio=0.4, run_time=2.0))
+            for lbl in orbit_labels:
+                self.play(FadeIn(lbl), run_time=0.35)
+            self.play(FadeIn(orbit_note))
+
+        self.wait(0.5)
         self.play(FadeOut(VGroup(hdr, sub4, earth, atmo, orbit_arcs,
                                   orbit_labels, orbit_note)))
         # Clear any residual mobjects
@@ -832,18 +906,15 @@ class ProjectileMotionScene(Scene):
             font_size=38,
         )
         eq_main.move_to(UP * 1.5)
-        self.play(Write(eq_main, run_time=1.8))
 
         arrow_down = Arrow(UP * 0.4, DOWN * 0.4, color=GRAY_B,
                            stroke_width=2.5, buff=0).move_to(UP * 0.3)
-        self.play(GrowArrow(arrow_down))
 
         result = MathTex(
             r"y = x\tan\theta - \frac{g\,x^2}{2v_0^2\cos^2\!\theta}",
             font_size=40, color=T_COL,
         )
         result.move_to(DOWN * 0.5)
-        self.play(Write(result, run_time=1.5))
 
         # Key principles grid — placed below result with enough gap
         principles = VGroup(
@@ -858,14 +929,22 @@ class ProjectileMotionScene(Scene):
         ).arrange(DOWN, buff=0.25, aligned_edge=LEFT)
         principles.move_to(DOWN * 2.4)
 
-        self.play(FadeIn(principles, lag_ratio=0.2, run_time=1.2))
-        self.wait(1.0)
-
         tagline = Text(
             "Two laws + one insight = every projectile that ever flew.",
             font_size=22, color=YELLOW_C, weight=BOLD,
         )
         tagline.to_edge(DOWN, buff=0.28)
-        self.play(Write(tagline))
-        self.wait(3.0)
+
+        with self.voiceover(
+            text="Two laws of motion, plus Galileo's insight that they're "
+                 "independent, explain every projectile that has ever "
+                 "flown — from a thrown ball to an orbiting moon."
+        ) as tracker:
+            self.play(Write(eq_main, run_time=1.8))
+            self.play(GrowArrow(arrow_down))
+            self.play(Write(result, run_time=1.5))
+            self.play(FadeIn(principles, lag_ratio=0.2, run_time=1.2))
+            self.play(Write(tagline))
+
+        self.wait(1.0)
         self.play(FadeOut(Group(*self.mobjects)))
