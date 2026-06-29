@@ -1,0 +1,6 @@
+manim==0.20.1
+numpy>=1.24
+scipy>=1.10
+manim-voiceover>=0.3.7
+pyttsx3>=2.99
+pydub>=0.25

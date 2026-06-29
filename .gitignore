@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+media/Tex/
+media/texts/
+media/videos/
+media/voiceovers/
