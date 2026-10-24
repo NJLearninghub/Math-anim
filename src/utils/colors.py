@@ -1,0 +1,11 @@
+from manim import *
+
+BG_COLOR      = "#0d1117"
+FLOW_COLOR    = BLUE_C
+FAST_COLOR    = "#ef5350"
+SLOW_COLOR    = "#42a5f5"
+AIRFOIL_FILL  = "#1a237e"
+AIRFOIL_STROKE = BLUE_C
+LIFT_COLOR    = GREEN
+BL_COLOR      = PURPLE_C
+ANNOTATION    = YELLOW_C
