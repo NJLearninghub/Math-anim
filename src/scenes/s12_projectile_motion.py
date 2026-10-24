@@ -14,8 +14,8 @@ Layout zones (strict — nothing may cross zone boundaries simultaneously):
   AXES    y ∈ [-2.0, +1.8]   (all animations live here)
   NOTE    y ≈ -3.10   (one-liner principle)
 
-Narration is provided by an offline TTS service (src/utils/tts.py) since
-gTTS is blocked from cloud IPs. Overlap safeguards live in
+Narration is generated with Sarvam AI's Bulbul TTS (src/utils/sarvam_tts.py);
+set SARVAM_API_KEY before rendering. Overlap safeguards live in
 src/utils/layout.py and are reused here for the S8 angle labels.
 """
 import sys, os
@@ -25,7 +25,7 @@ import numpy as np
 from manim import *
 from manim_voiceover import VoiceoverScene
 
-from src.utils.tts import OfflineTTSService
+from src.utils.sarvam_tts import SarvamTTSService
 from src.utils.layout import warn_zone_violation
 
 # ── palette ────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ class ProjectileMotionScene(VoiceoverScene):
 
     def construct(self):
         self.camera.background_color = BG
-        self.set_speech_service(OfflineTTSService())
+        self.set_speech_service(SarvamTTSService())
         self._s1_hook()
         self._s2_feynman_start()
         self._s3_horizontal()

@@ -6,3 +6,4 @@ from .layout import (
     check_overlap, safe_label_position, clamp_to_zone, warn_zone_violation,
 )
 from .tts import OfflineTTSService
+from .sarvam_tts import SarvamTTSService
